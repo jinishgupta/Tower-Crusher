@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower Destroyer — Vibe Jam 2026</title>
+    <meta name="description" content="Smash towers with a wrecking ball crane in this explosive 3D demolition game. Built for Vibe Jam 2026.">
+    <script async src="https://vibejam.cc/2026/widget.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- Vignette overlay -->
+    <div id="vignette"></div>
+
+    <!-- Username overlay (start screen) -->
+    <div id="username-overlay">
+        <div class="start-panel">
+            <h1 class="game-title">TOWER<br><span>DESTROYER</span></h1>
+            <p class="game-subtitle">VIBE JAM 2026</p>
+            <div class="start-input-group">
+                <input type="text" id="username-input" placeholder="Enter callsign..." maxlength="16" autocomplete="off">
+                <button id="play-btn">▶ DEPLOY</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <!-- Top left: HP + Energy -->
+        <div id="hud-top-left">
+            <div class="bar-row">
+                <span class="bar-label">HP</span>
+                <div class="bar-track">
+                    <div id="hp-bar" class="bar-fill bar-hp"></div>
+                </div>
+                <span id="hp-text" class="bar-value">100</span>
+            </div>
+            <div class="bar-row">
+                <span class="bar-label">⚡</span>
+                <div class="bar-track">
+                    <div id="energy-bar" class="bar-fill bar-energy"></div>
+                </div>
+                <span id="energy-text" class="bar-value">100</span>
+            </div>
+        </div>
+
+        <!-- Top center: Score + Combo -->
+        <div id="hud-top-center">
+            <div id="score-display">0</div>
+            <div id="combo-container">
+                <span id="combo-display">1.0x</span>
+            </div>
+            <div id="streak-text"></div>
+        </div>
+
+        <!-- Top right: Round + Stars + Leaderboard -->
+        <div id="hud-top-right">
+            <div id="round-display">ROUND 1</div>
+            <div id="tower-integrity-row">
+                <span class="bar-label-sm">TOWERS</span>
+                <div class="bar-track-sm">
+                    <div id="integrity-bar" class="bar-fill bar-integrity"></div>
+                </div>
+                <span id="integrity-text">100%</span>
+            </div>
+            <div id="stars-display">
+                <span class="star dim">★</span><span class="star dim">★</span><span class="star dim">★</span>
+            </div>
+            <button id="leaderboard-btn" title="Leaderboard (Tab)">🏆</button>
+        </div>
+
+        <!-- Bottom center: Ability cooldowns -->
+        <div id="hud-bottom-center">
+            <div class="ability-slot" id="ability-shockwave">
+                <div class="ability-cd-overlay"></div>
+                <div class="ability-icon-inner">🔥</div>
+                <span class="ability-key">E</span>
+                <span class="ability-name">Turbo Swing</span>
+            </div>
+            <div class="ability-slot" id="ability-slam">
+                <div class="ability-cd-overlay"></div>
+                <div class="ability-icon-inner">💣</div>
+                <span class="ability-key">Q</span>
+                <span class="ability-name">Ball Drop</span>
+            </div>
+        </div>
+
+        <!-- Bottom: Level + XP bar -->
+        <div id="hud-bottom">
+            <span id="level-display">LVL 1</span>
+            <div class="xp-track">
+                <div id="xp-bar" class="xp-fill"></div>
+            </div>
+            <span id="xp-text">0 / 100 XP</span>
+        </div>
+    </div>
+
+    <!-- Leaderboard panel -->
+    <div id="leaderboard-panel" class="hidden">
+        <div class="lb-header">
+            <h2>🏆 LEADERBOARD</h2>
+            <button id="lb-close-btn">✕</button>
+        </div>
+        <div id="lb-body">
+            <table id="lb-table">
+                <thead>
+                    <tr><th>#</th><th>CALLSIGN</th><th>SCORE</th><th>LVL</th><th>RND</th></tr>
+                </thead>
+                <tbody id="lb-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Portal labels container -->
+    <div id="portal-labels"></div>
+
+    <!-- Floating score texts container -->
+    <div id="floating-texts"></div>
+
+    <!-- Screen flash overlay -->
+    <div id="screen-flash"></div>
+
+    <!-- Round summary -->
+    <div id="round-summary" class="hidden">
+        <div class="summary-panel">
+            <h2 id="summary-title">ROUND COMPLETE</h2>
+            <div id="summary-stars" class="summary-stars"></div>
+            <div class="summary-row"><span>Score</span><span id="summary-score">0</span></div>
+            <div class="summary-row"><span>Combo Peak</span><span id="summary-combo">0x</span></div>
+            <div class="summary-row"><span>Time</span><span id="summary-time">0s</span></div>
+            <div class="summary-row"><span>XP Earned</span><span id="summary-xp">0</span></div>
+        </div>
+    </div>
+
+    <!-- Level up banner -->
+    <div id="level-up-banner" class="hidden">
+        <div class="lu-text">LEVEL UP!</div>
+        <div id="lu-level" class="lu-level">LEVEL 2</div>
+    </div>
+
+    <!-- Game over -->
+    <div id="game-over" class="hidden">
+        <div class="go-panel">
+            <h1 class="go-title">GAME OVER</h1>
+            <div class="go-stats">
+                <div class="summary-row"><span>Final Score</span><span id="go-score">0</span></div>
+                <div class="summary-row"><span>Rounds</span><span id="go-rounds">0</span></div>
+                <div class="summary-row"><span>Level</span><span id="go-level">0</span></div>
+            </div>
+            <button id="go-restart-btn">▶ PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- Crosshair -->
+    <div id="crosshair">
+        <div class="ch-dot"></div>
+        <div class="ch-line ch-top"></div>
+        <div class="ch-line ch-bottom"></div>
+        <div class="ch-line ch-left"></div>
+        <div class="ch-line ch-right"></div>
+    </div>
+
+    <!-- Instruction hint -->
+    <div id="click-hint" class="hidden">Click to lock mouse · WASD to drive · Mouse to aim · Left Click to SWING</div>
+
+    <!-- Game container -->
+    <div id="game-container"></div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
