@@ -1179,6 +1179,17 @@ html, body {
     }
 
     #hud-bottom-center {
-        bottom: 132px;
+        display: none !important;
+    }
+}
+
+@media (max-width: 768px) {
+    #hud-bottom-center {
+        display: none !important;
+    }
+
+    .portal-label {
+        font-size: 11px !important;
+        padding: 5px 12px !important;
     }
 }
