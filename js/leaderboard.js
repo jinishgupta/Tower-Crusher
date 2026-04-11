@@ -55,11 +55,16 @@ export function isLeaderboardOpen() {
     return isOpen;
 }
 
-// Save score to Supabase (upsert — only update if new score is higher)
-export async function saveScore(username, score, level, round) {
+function rankValue(entry) {
+    return (entry.stars || 0) * 500 + (entry.score || 0);
+}
+
+// Save score to Supabase (upsert — updates if rank value improves)
+export async function saveScore(username, score, stars, round) {
     const entry = {
         username: String(username).slice(0, 16),
         score: Math.round(score),
+        stars: Math.max(0, Math.round(stars || 0)),
         round: round || 1,
         updated_at: new Date().toISOString()
     };
@@ -70,26 +75,49 @@ export async function saveScore(username, score, level, round) {
     if (!supabase) return;
 
     try {
-        // Check if user exists
-        const { data: existing } = await supabase
+        let existing = null;
+        let supportsStars = true;
+
+        const withStars = await supabase
             .from('scores')
-            .select('score')
+            .select('score, stars')
             .eq('username', entry.username)
             .single();
 
-        if (existing) {
-            // Only update if new score is higher
-            if (entry.score > existing.score) {
-                await supabase
-                    .from('scores')
-                    .update({ score: entry.score, round: entry.round, updated_at: entry.updated_at })
-                    .eq('username', entry.username);
-            }
+        if (withStars.error) {
+            supportsStars = false;
+            const withoutStars = await supabase
+                .from('scores')
+                .select('score')
+                .eq('username', entry.username)
+                .single();
+            existing = withoutStars.data ? { score: withoutStars.data.score || 0, stars: 0 } : null;
         } else {
-            // Insert new entry
+            existing = withStars.data;
+        }
+
+        const shouldUpdate = !existing || rankValue(entry) > rankValue(existing);
+        if (!shouldUpdate) return;
+
+        if (existing) {
+            const payload = supportsStars
+                ? { score: entry.score, stars: entry.stars, round: entry.round, updated_at: entry.updated_at }
+                : { score: entry.score, round: entry.round, updated_at: entry.updated_at };
             await supabase
                 .from('scores')
-                .insert(entry);
+                .update(payload)
+                .eq('username', entry.username);
+        } else {
+            if (supportsStars) {
+                await supabase.from('scores').insert(entry);
+            } else {
+                await supabase.from('scores').insert({
+                    username: entry.username,
+                    score: entry.score,
+                    round: entry.round,
+                    updated_at: entry.updated_at,
+                });
+            }
         }
     } catch (err) {
         console.warn('Could not save score to Supabase:', err);
@@ -100,20 +128,30 @@ export async function saveScore(username, score, level, round) {
 async function fetchAndRender() {
     if (!tbodyEl) return;
 
-    tbodyEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6a6a8a;padding:20px;">Loading...</td></tr>';
+    tbodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6a6a8a;padding:20px;">Loading...</td></tr>';
 
     let entries = [];
 
     if (supabase) {
         try {
-            const { data, error } = await supabase
+            const withStars = await supabase
                 .from('scores')
-                .select('username, score, round')
+                .select('username, score, stars, round')
+                .order('stars', { ascending: false })
                 .order('score', { ascending: false })
                 .limit(20);
 
-            if (!error && data) {
-                entries = data;
+            if (!withStars.error && withStars.data) {
+                entries = withStars.data;
+            } else {
+                const fallback = await supabase
+                    .from('scores')
+                    .select('username, score, round')
+                    .order('score', { ascending: false })
+                    .limit(20);
+                if (!fallback.error && fallback.data) {
+                    entries = fallback.data.map((e) => ({ ...e, stars: 0 }));
+                }
             }
         } catch (err) {
             console.warn('Could not fetch leaderboard from Supabase:', err);
@@ -133,7 +171,7 @@ function renderEntries(entries) {
     tbodyEl.innerHTML = '';
 
     if (!entries || entries.length === 0) {
-        tbodyEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6a6a8a;padding:20px;">No scores yet. Start demolishing!</td></tr>';
+        tbodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6a6a8a;padding:20px;">No scores yet. Start demolishing!</td></tr>';
         return;
     }
 
@@ -149,6 +187,7 @@ function renderEntries(entries) {
             <td>${rankEmoji}</td>
             <td style="${isCurrent ? 'color:#ffd700;font-weight:700;' : ''}">${escapeHtml(entry.username)}</td>
             <td>${entry.score.toLocaleString()}</td>
+            <td>${entry.stars || 0}</td>
             <td>${entry.round || 1}</td>
         `;
         tbodyEl.appendChild(tr);
@@ -163,14 +202,15 @@ function saveToLocal(entry) {
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         const existing = data.find(e => e.username === entry.username);
         if (existing) {
-            if (entry.score > existing.score) {
+            if (rankValue(entry) > rankValue(existing)) {
                 existing.score = entry.score;
+                existing.stars = entry.stars;
                 existing.round = entry.round;
             }
         } else {
             data.push(entry);
         }
-        data.sort((a, b) => b.score - a.score);
+        data.sort((a, b) => rankValue(b) - rankValue(a));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data.slice(0, 50)));
     } catch { /* storage full */ }
 }

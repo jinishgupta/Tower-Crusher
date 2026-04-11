@@ -14,9 +14,15 @@ export const MATERIALS = {
 };
 
 const MATERIAL_ORDER = ['wood', 'stone', 'steel', 'crystal', 'boss'];
+const ARCHETYPE_ORDER = ['standard', 'shielded', 'segmented', 'regenerating_core'];
 
 export function getMaterialForRound(round) {
     return MATERIAL_ORDER[(round - 1) % MATERIAL_ORDER.length];
+}
+
+export function getArchetypeForRound(round) {
+    if (round <= 1) return 'standard';
+    return ARCHETYPE_ORDER[(round - 1) % ARCHETYPE_ORDER.length];
 }
 
 const blockSize = 1.0;
@@ -33,10 +39,14 @@ function varyColor(baseColor, variation = 0.08) {
     return c;
 }
 
-export function generateTower(scene, round, centerX = 0, centerZ = -15) {
+export function generateTower(scene, round, centerX = 0, centerZ = -15, archetypeOverride = '') {
     const matKey = getMaterialForRound(round);
     const matDef = MATERIALS[matKey];
     const isBoss = matKey === 'boss';
+    const archetype = archetypeOverride || getArchetypeForRound(round);
+    const isSegmented = archetype === 'segmented';
+    const isShielded = archetype === 'shielded';
+    const hasRegenCore = archetype === 'regenerating_core';
 
     // TALL buildings — scale aggressively with round
     const baseWidth = isBoss ? 4 : 3 + Math.min(Math.floor(round / 4), 2);
@@ -52,6 +62,7 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15) {
 
     const offsetX = -((baseWidth - 1) * blockUnit) / 2;
     const offsetZ = -((baseDepth - 1) * blockUnit) / 2;
+    const segmentGap = isSegmented ? 0.55 : 0;
 
     // Grid lookup for structural support checking
     const grid = {};
@@ -82,7 +93,8 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15) {
 
                 const mesh = new THREE.Mesh(geometry, material);
                 const wx = centerX + offsetX + x * blockUnit;
-                const wy = blockSize / 2 + y * blockUnit;
+                const segmentOffset = isSegmented ? Math.floor(y / 5) * segmentGap : 0;
+                const wy = blockSize / 2 + y * blockUnit + segmentOffset;
                 const wz = centerZ + offsetZ + z * blockUnit;
 
                 mesh.position.set(wx, wy, wz);
@@ -106,13 +118,20 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15) {
                     mesh, body,
                     hp: matDef.hpPerBlock,
                     maxHp: matDef.hpPerBlock,
+                    shieldHp: isShielded ? 1 : 0,
                     materialKey: matKey,
                     destroyed: false,
                     fallen: false,
                     fallenTimer: 0,
                     flashTimer: 0,
+                    weakPoint: false,
+                    isRegenCore: false,
+                    regenTimer: 0,
+                    canRegen: false,
+                    regenCharges: 0,
                     gridX: x, gridY: y, gridZ: z,
-                    originalColor: blockColor
+                    originalColor: blockColor,
+                    basePosition: new THREE.Vector3(wx, wy, wz)
                 };
                 blocks.push(block);
 
@@ -128,6 +147,10 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15) {
         totalBlocks: blocks.length,
         destroyedCount: 0,
         matKey, matDef, isBoss,
+        archetype,
+        isShielded,
+        isSegmented,
+        hasRegenCore,
         collapsed: false,
         wobbleTimer: 0,
         wobbleActive: false,
@@ -138,13 +161,62 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15) {
         bossMaxHp: isBoss ? blocks.length * matDef.hpPerBlock : 0,
         supportCheckPending: false,
         supportCheckTimer: 0,
+        scene,
     };
+
+    assignWeakPoints(tower);
+    if (hasRegenCore) markRegeneratingCoreBlocks(tower);
 
     return tower;
 }
 
+function assignWeakPoints(tower) {
+    const topBlocks = tower.blocks.filter((b) => b.gridY >= Math.floor(tower.height * 0.6));
+    const targetCount = Math.max(2, Math.floor(topBlocks.length * 0.08));
+
+    for (let i = topBlocks.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [topBlocks[i], topBlocks[j]] = [topBlocks[j], topBlocks[i]];
+    }
+
+    for (let i = 0; i < Math.min(targetCount, topBlocks.length); i++) {
+        const block = topBlocks[i];
+        block.weakPoint = true;
+        block.mesh.material.emissive.setHex(0x3a0018);
+        block.mesh.material.emissiveIntensity = 0.25;
+        block.mesh.scale.setScalar(0.94);
+    }
+}
+
+function markRegeneratingCoreBlocks(tower) {
+    const centerX = Math.floor((tower.baseWidth - 1) / 2);
+    const centerZ = Math.floor((tower.baseDepth - 1) / 2);
+
+    for (const block of tower.blocks) {
+        if (block.gridX === centerX && block.gridZ === centerZ) {
+            if (block.gridY >= 2 && block.gridY <= tower.height - 2 && block.gridY % 4 === 0) {
+                block.isRegenCore = true;
+                block.regenCharges = 1;
+                block.mesh.material.emissive.setHex(0x006064);
+                block.mesh.material.emissiveIntensity = 0.45;
+                block.maxHp += 1;
+                block.hp = block.maxHp;
+            }
+        }
+    }
+}
+
 export function damageBlock(tower, block, damage, impactDir) {
-    if (block.destroyed) return { destroyed: false, score: 0 };
+    if (block.destroyed) return { destroyed: false, score: 0, weakPoint: false };
+
+    if (block.shieldHp > 0) {
+        block.shieldHp--;
+        block.flashTimer = 0.12;
+        emitSparks(block.mesh.position, 5);
+        return { destroyed: false, score: 0, weakPoint: block.weakPoint, shieldHit: true };
+    }
+
+    if (block.weakPoint) damage += 1;
 
     block.hp -= damage;
     block.flashTimer = 0.15;
@@ -163,7 +235,7 @@ export function damageBlock(tower, block, damage, impactDir) {
         return destroyBlock(tower, block, impactDir);
     }
 
-    return { destroyed: false, score: 0 };
+    return { destroyed: false, score: 0, weakPoint: block.weakPoint };
 }
 
 function destroyBlock(tower, block, impactDir) {
@@ -189,6 +261,12 @@ function destroyBlock(tower, block, impactDir) {
     // Remove from grid
     const key = `${block.gridX},${block.gridY},${block.gridZ}`;
     delete tower.grid[key];
+
+    if (block.isRegenCore && block.regenCharges > 0) {
+        block.canRegen = true;
+        block.regenTimer = 4.5;
+        block.regenCharges--;
+    }
 
     // Schedule structural support check — blocks above should fall
     tower.supportCheckPending = true;
@@ -226,7 +304,7 @@ function destroyBlock(tower, block, impactDir) {
     }
 
     const score = Math.round(10 * tower.matDef.scoreBonus);
-    return { destroyed: true, score, pos };
+    return { destroyed: true, score, pos, weakPoint: block.weakPoint };
 }
 
 // ====== STRUCTURAL SUPPORT CHECK ======
@@ -296,6 +374,50 @@ export function getIntegrity(tower) {
     return 1 - (tower.destroyedCount / tower.totalBlocks);
 }
 
+function regenerateCoreBlock(tower, block) {
+    if (!tower.scene || !block.isRegenCore || !block.destroyed) return;
+
+    const geometry = new THREE.BoxGeometry(blockSize * 0.96, blockSize * 0.96, blockSize * 0.96);
+    const material = new THREE.MeshStandardMaterial({
+        color: varyColor(MATERIALS.crystal.color),
+        emissive: 0x007a80,
+        roughness: 0.08,
+        metalness: 0.25
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(block.basePosition);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    tower.scene.add(mesh);
+
+    const body = createBody({
+        x: block.basePosition.x,
+        y: block.basePosition.y,
+        z: block.basePosition.z,
+        width: blockSize,
+        height: blockSize,
+        depth: blockSize,
+        mass: 1,
+        isStatic: true,
+    });
+
+    block.mesh = mesh;
+    block.body = body;
+    block.destroyed = false;
+    block.fallen = false;
+    block.fallenTimer = 0;
+    block.hp = block.maxHp;
+    block.canRegen = false;
+    block.regenTimer = 0;
+    block.shieldHp = tower.isShielded ? 1 : 0;
+
+    const key = `${block.gridX},${block.gridY},${block.gridZ}`;
+    tower.grid[key] = block;
+    tower.destroyedCount = Math.max(0, tower.destroyedCount - 1);
+
+    emitShatter(block.basePosition, 12);
+}
+
 export function updateTower(tower, dt, scene) {
     tower.wobbleTimer += dt;
 
@@ -309,16 +431,35 @@ export function updateTower(tower, dt, scene) {
     }
 
     for (const block of tower.blocks) {
+        if (block.destroyed && block.canRegen) {
+            block.regenTimer -= dt;
+            if (block.regenTimer <= 0) {
+                regenerateCoreBlock(tower, block);
+            }
+            continue;
+        }
+
         if (block.destroyed) continue;
 
         // Flash on hit
         if (block.flashTimer > 0) {
             block.flashTimer -= dt;
-            block.mesh.material.emissive.setHex(0xff0000);
+            block.mesh.material.emissive.setHex(block.shieldHp > 0 ? 0x1b6cff : 0xff0000);
             block.mesh.material.emissiveIntensity = (block.flashTimer / 0.15) * 0.8;
         } else {
-            block.mesh.material.emissive.setHex(tower.matDef.emissive);
-            block.mesh.material.emissiveIntensity = tower.matKey === 'crystal' ? 0.3 : 0;
+            if (block.isRegenCore) {
+                block.mesh.material.emissive.setHex(0x006064);
+                block.mesh.material.emissiveIntensity = 0.45;
+            } else if (block.weakPoint) {
+                block.mesh.material.emissive.setHex(0x3a0018);
+                block.mesh.material.emissiveIntensity = 0.28;
+            } else if (block.shieldHp > 0) {
+                block.mesh.material.emissive.setHex(0x123b96);
+                block.mesh.material.emissiveIntensity = 0.2;
+            } else {
+                block.mesh.material.emissive.setHex(tower.matDef.emissive);
+                block.mesh.material.emissiveIntensity = tower.matKey === 'crystal' ? 0.3 : 0;
+            }
         }
 
         // Sync dynamic blocks to physics body
@@ -349,6 +490,15 @@ export function updateTower(tower, dt, scene) {
                 block.mesh.parent?.remove(block.mesh);
                 block.mesh.material.dispose();
                 removeBody(block.body);
+
+                if (block.isRegenCore) {
+                    if (block.regenCharges > 0) {
+                        block.canRegen = true;
+                        block.regenTimer = 5;
+                        block.regenCharges--;
+                    }
+                }
+
                 // Remove from grid
                 const key = `${block.gridX},${block.gridY},${block.gridZ}`;
                 delete tower.grid[key];

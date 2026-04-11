@@ -17,13 +17,19 @@ const urlParams = new URLSearchParams(window.location.search);
 const isPortalEntry = urlParams.get('portal') === 'true';
 const refParam = urlParams.get('ref') || '';
 const usernameParam = urlParams.get('username') || '';
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 const gameParams = {
     portalMode: isPortalEntry,
     refDomain: refParam,
     refUrl: refParam ? (refParam.startsWith('http') ? refParam : `https://${refParam}`) : '',
-    currentScore: 0
+    currentScore: 0,
+    touchMode: isTouchDevice,
 };
+
+if (isTouchDevice) {
+    document.body.classList.add('touch-mode');
+}
 
 // -- Three.js Setup --
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -97,7 +103,13 @@ function beginGame(username) {
     setupPortals();
     startGame(gs, scene, camera, username, gameParams);
 
-    setTimeout(() => requestPointerLock(), 100);
+    if (isTouchDevice) {
+        if (gs.player) gs.player.lockedIn = true;
+        document.getElementById('click-hint')?.classList.add('hidden');
+        initMobileControls();
+    } else {
+        setTimeout(() => requestPointerLock(), 100);
+    }
 }
 
 if (isPortalEntry) {
@@ -117,6 +129,85 @@ if (isPortalEntry) {
             beginGame(usernameInput.value.trim() || storedUsername);
         }
     });
+}
+
+let mobileControlsInitialized = false;
+function bindHoldButton(id, code) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const down = (e) => {
+        e.preventDefault();
+        if (gs.player) gs.player.keys[code] = true;
+    };
+    const up = (e) => {
+        e.preventDefault();
+        if (gs.player) gs.player.keys[code] = false;
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+}
+
+function bindTapButton(id, handler) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        ensureAudio();
+        handler();
+    });
+}
+
+function initMobileControls() {
+    if (!isTouchDevice || mobileControlsInitialized) return;
+    mobileControlsInitialized = true;
+
+    bindHoldButton('mb-up', 'KeyW');
+    bindHoldButton('mb-down', 'KeyS');
+    bindHoldButton('mb-left', 'KeyA');
+    bindHoldButton('mb-right', 'KeyD');
+    bindHoldButton('mb-sprint', 'ShiftLeft');
+
+    bindTapButton('mb-smash', () => handleSwing(gs));
+    bindTapButton('mb-boost', () => handleTurboSwing(gs));
+    bindTapButton('mb-slam', () => handleBallDrop(gs));
+
+    let lookTouchId = null;
+    let lastX = 0;
+    let lastY = 0;
+    const LOOK_SENS = 0.003;
+
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('touchstart', (e) => {
+        if (!gs.player) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        if (e.target.closest('#mobile-controls')) return;
+        lookTouchId = t.identifier;
+        lastX = t.clientX;
+        lastY = t.clientY;
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+        if (!gs.player || lookTouchId === null) return;
+        const touch = Array.from(e.changedTouches).find((t) => t.identifier === lookTouchId);
+        if (!touch) return;
+        const dx = touch.clientX - lastX;
+        const dy = touch.clientY - lastY;
+        lastX = touch.clientX;
+        lastY = touch.clientY;
+
+        gs.player.yaw -= dx * LOOK_SENS;
+        gs.player.cameraPitch -= dy * LOOK_SENS * 0.4;
+        gs.player.cameraPitch = Math.max(-0.7, Math.min(0.1, gs.player.cameraPitch));
+        e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        const ended = Array.from(e.changedTouches).some((t) => t.identifier === lookTouchId);
+        if (ended) lookTouchId = null;
+    }, { passive: true });
 }
 
 // -- Input Events --
@@ -171,7 +262,7 @@ document.addEventListener('keydown', (e) => {
 // -- Restart button --
 document.getElementById('go-restart-btn').addEventListener('click', () => {
     restartGame(gs, scene, camera);
-    setTimeout(() => requestPointerLock(), 100);
+    if (!isTouchDevice) setTimeout(() => requestPointerLock(), 100);
 });
 
 // -- Resize --

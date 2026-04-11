@@ -1,8 +1,10 @@
 // js/config.js — Supabase configuration
 // Fill in your Supabase project URL and anon (public) key below.
 // Get these from: https://supabase.com/dashboard → Project Settings → API
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {};
+
+export const SUPABASE_URL = env.VITE_SUPABASE_URL || window.SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = env.VITE_SUPABASE_PUBLISHABLE_KEY || window.SUPABASE_ANON_KEY || '';
 
 /*
   TABLE SETUP — Run this SQL in Supabase SQL Editor:

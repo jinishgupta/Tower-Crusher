@@ -12,8 +12,14 @@ export function initUI() {
     dom.comboDisplay = document.getElementById('combo-display');
     dom.streakText = document.getElementById('streak-text');
     dom.roundDisplay = document.getElementById('round-display');
+    dom.starsDisplay = document.getElementById('stars-display');
     dom.integrityBar = document.getElementById('integrity-bar');
     dom.integrityText = document.getElementById('integrity-text');
+    dom.missionSlots = [
+        document.getElementById('obj-time'),
+        document.getElementById('obj-weak'),
+        document.getElementById('obj-ability')
+    ];
     dom.shockwaveSlot = document.getElementById('ability-shockwave');
     dom.slamSlot = document.getElementById('ability-slam');
     dom.screenFlash = document.getElementById('screen-flash');
@@ -23,6 +29,11 @@ export function initUI() {
     dom.levelUpBanner = document.getElementById('level-up-banner');
     dom.gameOver = document.getElementById('game-over');
     dom.clickHint = document.getElementById('click-hint');
+    dom.summaryMissionSlots = [
+        document.getElementById('summary-obj-time'),
+        document.getElementById('summary-obj-weak'),
+        document.getElementById('summary-obj-ability')
+    ];
 }
 
 export function showHUD() { dom.hud.classList.remove('hidden'); }
@@ -63,6 +74,7 @@ export function updateHUD(state, dt) {
 
     // Round
     dom.roundDisplay.textContent = `ROUND ${state.round}`;
+    dom.starsDisplay.textContent = `⭐⭐⭐ ${state.totalStars || 0}`;
 
     // Tower integrity
     const intPct = Math.round(state.integrity * 100);
@@ -72,9 +84,31 @@ export function updateHUD(state, dt) {
     if (intPct < 15) dom.integrityBar.classList.add('critical');
     else if (intPct < 40) dom.integrityBar.classList.add('low');
 
+    if (state.missions && Array.isArray(state.missions)) {
+        for (let i = 0; i < dom.missionSlots.length; i++) {
+            const slot = dom.missionSlots[i];
+            const mission = state.missions[i];
+            if (!slot) continue;
+            if (!mission) {
+                slot.textContent = '';
+                continue;
+            }
+            setMissionItem(slot, mission.label, mission.completed, mission.failed);
+        }
+    }
+
     // Ability cooldowns
     updateAbilitySlot(dom.shockwaveSlot, state.shockwaveCd, 5);
     updateAbilitySlot(dom.slamSlot, state.slamCd, 10);
+}
+
+function setMissionItem(el, label, complete, failed) {
+    if (!el) return;
+    const marker = complete ? '✓' : failed ? '✗' : '○';
+    el.textContent = `${marker} ${label}`;
+    el.classList.remove('mission-complete', 'mission-fail');
+    if (complete) el.classList.add('mission-complete');
+    if (failed) el.classList.add('mission-fail');
 }
 
 function updateAbilitySlot(slot, cd, maxCd) {
@@ -143,9 +177,25 @@ export function worldToScreen(pos3D, camera) {
 export function showRoundSummary(stats) {
     dom.roundSummary.classList.remove('hidden');
     document.getElementById('summary-title').textContent = `ROUND ${stats.round} COMPLETE`;
+    document.getElementById('summary-stars').textContent = '★'.repeat(stats.stars || 0) + '☆'.repeat(3 - (stats.stars || 0));
     document.getElementById('summary-score').textContent = stats.score.toLocaleString();
+    document.getElementById('summary-star-bonus').textContent = `+${(stats.starBonus || 0).toLocaleString()}`;
+    document.getElementById('summary-total-stars').textContent = (stats.totalStars || 0).toLocaleString();
     document.getElementById('summary-combo').textContent = `${stats.peakCombo.toFixed(1)}x`;
     document.getElementById('summary-time').textContent = `${stats.time.toFixed(1)}s`;
+
+    const objectives = Array.isArray(stats.objectives) ? stats.objectives : [];
+    for (let i = 0; i < dom.summaryMissionSlots.length; i++) {
+        setSummaryObjective(dom.summaryMissionSlots[i], objectives[i]);
+    }
+}
+
+function setSummaryObjective(el, objective) {
+    if (!el || !objective) return;
+    const marker = objective.completed ? '✓' : '✗';
+    el.textContent = `${marker} ${objective.label}`;
+    el.classList.remove('complete', 'fail');
+    el.classList.add(objective.completed ? 'complete' : 'fail');
 }
 
 export function hideRoundSummary() {
