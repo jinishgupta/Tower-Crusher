@@ -13,11 +13,6 @@ const TURBO_CD = 5;
 const DROP_CD = 10;
 const GRAVITY = 20;
 const BALL_DAMPING = 0.992;
-const MAX_HP = 100;
-const MAX_ENERGY = 100;
-const ENERGY_REGEN = 6;
-const TURBO_COST = 30;
-const DROP_COST = 50;
 const CAMERA_DIST = 20;
 const CAMERA_HEIGHT = 12;
 const BOOM_HEIGHT = 14;       // tall crane boom
@@ -218,9 +213,6 @@ export function createPlayer(camera, scene) {
         keys: {},
         swingCd: 0, turboCd: 0, dropCd: 0,
         isDropping: false, dropTimer: 0,
-        // Stats
-        hp: MAX_HP, maxHp: MAX_HP,
-        energy: MAX_ENERGY, maxEnergy: MAX_ENERGY,
         // Camera
         cameraPitch: -0.2,
         lockedIn: false,
@@ -266,8 +258,6 @@ export function updatePlayer(player, dt) {
     if (player.dropCd > 0) player.dropCd -= dt;
     player.shockwaveCooldown = player.turboCd;
     player.slamCooldown = player.dropCd;
-
-    player.energy = Math.min(player.maxEnergy, player.energy + ENERGY_REGEN * dt);
 
     // ---- Movement ----
     const fwdX = -Math.sin(player.yaw);
@@ -453,10 +443,9 @@ export function swingBall(player) {
 
 // ---- TURBO SWING ----
 export function turboSwing(player) {
-    if (player.turboCd > 0 || player.energy < TURBO_COST) return false;
+    if (player.turboCd > 0) return false;
     player.turboCd = TURBO_CD;
     player.shockwaveCooldown = TURBO_CD;
-    player.energy -= TURBO_COST;
 
     const fwdX = -Math.sin(player.yaw);
     const fwdZ = -Math.cos(player.yaw);
@@ -469,10 +458,9 @@ export function turboSwing(player) {
 
 // ---- BALL DROP ----
 export function ballDrop(player) {
-    if (player.dropCd > 0 || player.energy < DROP_COST || player.isDropping) return false;
+    if (player.dropCd > 0 || player.isDropping) return false;
     player.dropCd = DROP_CD;
     player.slamCooldown = DROP_CD;
-    player.energy -= DROP_COST;
 
     player.ballX = player.tipX;
     player.ballY = player.tipY + 5;
@@ -514,16 +502,10 @@ export function getPlayerPosition(player) {
     return { x: player.posX, y: 1, z: player.posZ };
 }
 
-export function damagePlayer(player, amount) {
-    player.hp = Math.max(0, player.hp - amount);
-}
-
 export function resetPlayer(player) {
     player.posX = 0;
     player.posZ = 10;
     player.yaw = 0;
-    player.hp = MAX_HP;
-    player.energy = MAX_ENERGY;
     player.swingCd = 0;
     player.turboCd = 0;
     player.dropCd = 0;

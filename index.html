@@ -34,28 +34,10 @@
         </div>
     </div>
 
-    <!-- HUD -->
+    <!-- HUD (simplified) -->
     <div id="hud" class="hidden">
-        <!-- Top left: HP + Energy -->
+        <!-- Top left: Score + Combo -->
         <div id="hud-top-left">
-            <div class="bar-row">
-                <span class="bar-label">HP</span>
-                <div class="bar-track">
-                    <div id="hp-bar" class="bar-fill bar-hp"></div>
-                </div>
-                <span id="hp-text" class="bar-value">100</span>
-            </div>
-            <div class="bar-row">
-                <span class="bar-label">⚡</span>
-                <div class="bar-track">
-                    <div id="energy-bar" class="bar-fill bar-energy"></div>
-                </div>
-                <span id="energy-text" class="bar-value">100</span>
-            </div>
-        </div>
-
-        <!-- Top center: Score + Combo -->
-        <div id="hud-top-center">
             <div id="score-display">0</div>
             <div id="combo-container">
                 <span id="combo-display">1.0x</span>
@@ -63,7 +45,7 @@
             <div id="streak-text"></div>
         </div>
 
-        <!-- Top right: Round + Stars + Leaderboard -->
+        <!-- Top right: Round + Tower Integrity + Leaderboard -->
         <div id="hud-top-right">
             <div id="round-display">ROUND 1</div>
             <div id="tower-integrity-row">
@@ -72,9 +54,6 @@
                     <div id="integrity-bar" class="bar-fill bar-integrity"></div>
                 </div>
                 <span id="integrity-text">100%</span>
-            </div>
-            <div id="stars-display">
-                <span class="star dim">★</span><span class="star dim">★</span><span class="star dim">★</span>
             </div>
             <button id="leaderboard-btn" title="Leaderboard (Tab)">🏆</button>
         </div>
@@ -94,15 +73,6 @@
                 <span class="ability-name">Ball Drop</span>
             </div>
         </div>
-
-        <!-- Bottom: Level + XP bar -->
-        <div id="hud-bottom">
-            <span id="level-display">LVL 1</span>
-            <div class="xp-track">
-                <div id="xp-bar" class="xp-fill"></div>
-            </div>
-            <span id="xp-text">0 / 100 XP</span>
-        </div>
     </div>
 
     <!-- Leaderboard panel -->
@@ -114,7 +84,7 @@
         <div id="lb-body">
             <table id="lb-table">
                 <thead>
-                    <tr><th>#</th><th>CALLSIGN</th><th>SCORE</th><th>LVL</th><th>RND</th></tr>
+                    <tr><th>#</th><th>CALLSIGN</th><th>SCORE</th><th>RND</th></tr>
                 </thead>
                 <tbody id="lb-tbody"></tbody>
             </table>
@@ -134,11 +104,9 @@
     <div id="round-summary" class="hidden">
         <div class="summary-panel">
             <h2 id="summary-title">ROUND COMPLETE</h2>
-            <div id="summary-stars" class="summary-stars"></div>
             <div class="summary-row"><span>Score</span><span id="summary-score">0</span></div>
             <div class="summary-row"><span>Combo Peak</span><span id="summary-combo">0x</span></div>
             <div class="summary-row"><span>Time</span><span id="summary-time">0s</span></div>
-            <div class="summary-row"><span>XP Earned</span><span id="summary-xp">0</span></div>
         </div>
     </div>
 
@@ -155,7 +123,6 @@
             <div class="go-stats">
                 <div class="summary-row"><span>Final Score</span><span id="go-score">0</span></div>
                 <div class="summary-row"><span>Rounds</span><span id="go-rounds">0</span></div>
-                <div class="summary-row"><span>Level</span><span id="go-level">0</span></div>
             </div>
             <button id="go-restart-btn">▶ PLAY AGAIN</button>
         </div>

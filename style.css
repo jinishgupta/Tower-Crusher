@@ -191,67 +191,20 @@ html, body {
 }
 #hud button, #hud input { pointer-events: auto; }
 
-/* -- Top Left: HP + Energy -- */
+/* -- Top Left: Score + Combo -- */
 #hud-top-left {
     position: absolute; top: 20px; left: 20px;
-    display: flex; flex-direction: column; gap: 8px;
-    width: 240px;
     background: rgba(0,0,0,0.45);
-    padding: 12px 14px;
+    padding: 14px 20px;
     border-radius: 10px;
     backdrop-filter: blur(4px);
-}
-.bar-row {
-    display: flex; align-items: center; gap: 8px;
-}
-.bar-label {
-    font-family: var(--font-display);
-    font-size: 11px;
-    font-weight: 700;
-    width: 24px;
-    text-align: center;
-    color: var(--text-dim);
-}
-.bar-track {
-    flex: 1;
-    height: 14px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 7px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.08);
+    text-align: left;
 }
 .bar-fill {
     height: 100%;
     border-radius: 7px;
     transition: width 0.25s ease;
     width: 100%;
-}
-.bar-hp {
-    background: linear-gradient(90deg, #ff1a1a, var(--hp-red));
-    box-shadow: inset 0 0 8px rgba(255,51,85,0.4);
-}
-.bar-energy {
-    background: linear-gradient(90deg, #0077ff, var(--energy-cyan));
-    box-shadow: inset 0 0 8px rgba(0,229,255,0.4);
-}
-.bar-value {
-    font-family: var(--font-display);
-    font-size: 12px;
-    font-weight: 700;
-    width: 32px;
-    text-align: right;
-    color: var(--text-primary);
-}
-
-/* -- Top Center: Score + Combo -- */
-#hud-top-center {
-    position: absolute; top: 16px; left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    background: rgba(0,0,0,0.45);
-    padding: 10px 24px;
-    border-radius: 10px;
-    backdrop-filter: blur(4px);
 }
 #score-display {
     font-family: var(--font-display);
@@ -353,13 +306,7 @@ html, body {
     width: 36px;
     text-align: right;
 }
-#stars-display {
-    font-size: 20px;
-    letter-spacing: 4px;
-}
-.star { color: rgba(255,215,0,0.15); transition: color 0.3s, text-shadow 0.3s; }
-.star.lit { color: var(--gold); text-shadow: 0 0 10px var(--gold); }
-.star.dim { color: rgba(255,215,0,0.15); }
+
 
 #leaderboard-btn {
     background: var(--panel-bg);
@@ -422,42 +369,7 @@ html, body {
     box-shadow: 0 0 10px rgba(0,240,255,0.15);
 }
 
-/* -- Bottom: XP Bar -- */
-#hud-bottom {
-    position: absolute; bottom: 16px; left: 20px; right: 20px;
-    display: flex; align-items: center; gap: 12px;
-}
-#level-display {
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--xp-purple);
-    white-space: nowrap;
-}
-.xp-track {
-    flex: 1;
-    height: 8px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid rgba(168,85,247,0.2);
-}
-.xp-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, var(--xp-purple), #d946ef);
-    border-radius: 4px;
-    transition: width 0.4s ease;
-    box-shadow: inset 0 0 8px rgba(168,85,247,0.5);
-}
-#xp-text {
-    font-family: var(--font-display);
-    font-size: 10px;
-    color: var(--text-dim);
-    white-space: nowrap;
-    min-width: 80px;
-    text-align: right;
-}
+
 
 /* ============================================
    LEADERBOARD

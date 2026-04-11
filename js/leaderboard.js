@@ -1,17 +1,33 @@
-// leaderboard.js — localStorage leaderboard, Tab toggle panel
+// leaderboard.js — Supabase-backed leaderboard
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-const STORAGE_KEY = 'tower_destroyer_leaderboard';
-const MAX_ENTRIES = 20;
-
+let supabase = null;
 let panelEl = null;
 let tbodyEl = null;
 let isOpen = false;
 let currentUsername = '';
 
+function initSupabase() {
+    if (supabase) return;
+    if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+        console.warn('⚠️ Supabase not configured. Leaderboard will be local-only.');
+        return;
+    }
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase connected');
+    } catch (err) {
+        console.warn('Supabase init failed:', err);
+    }
+}
+
 export function initLeaderboard(username) {
     currentUsername = username;
     panelEl = document.getElementById('leaderboard-panel');
     tbodyEl = document.getElementById('lb-tbody');
+
+    initSupabase();
 
     document.getElementById('leaderboard-btn').addEventListener('click', toggleLeaderboard);
     document.getElementById('lb-close-btn').addEventListener('click', () => hideLeaderboard());
@@ -24,7 +40,7 @@ export function toggleLeaderboard() {
 
 export function showLeaderboard() {
     if (!panelEl) return;
-    renderLeaderboard();
+    fetchAndRender();
     panelEl.classList.remove('hidden');
     isOpen = true;
 }
@@ -39,56 +55,85 @@ export function isLeaderboardOpen() {
     return isOpen;
 }
 
-function getEntries() {
-    try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
-    }
-}
+// Save score to Supabase (upsert — only update if new score is higher)
+export async function saveScore(username, score, level, round) {
+    const entry = {
+        username: String(username).slice(0, 16),
+        score: Math.round(score),
+        round: round || 1,
+        updated_at: new Date().toISOString()
+    };
 
-function saveEntries(entries) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch { /* storage full */ }
-}
+    // Always save to localStorage as backup
+    saveToLocal(entry);
 
-export function saveScore(username, score, level, round) {
-    const entries = getEntries();
-    // Check if user already has an entry — update if higher
-    const existing = entries.find(e => e.username === username);
-    if (existing) {
-        if (score > existing.score) {
-            existing.score = score;
-            existing.level = level;
-            existing.round = round;
-            existing.date = Date.now();
+    if (!supabase) return;
+
+    try {
+        // Check if user exists
+        const { data: existing } = await supabase
+            .from('scores')
+            .select('score')
+            .eq('username', entry.username)
+            .single();
+
+        if (existing) {
+            // Only update if new score is higher
+            if (entry.score > existing.score) {
+                await supabase
+                    .from('scores')
+                    .update({ score: entry.score, round: entry.round, updated_at: entry.updated_at })
+                    .eq('username', entry.username);
+            }
+        } else {
+            // Insert new entry
+            await supabase
+                .from('scores')
+                .insert(entry);
         }
-    } else {
-        entries.push({ username, score, level, round, date: Date.now() });
+    } catch (err) {
+        console.warn('Could not save score to Supabase:', err);
     }
-    // Sort by score desc
-    entries.sort((a, b) => b.score - a.score);
-    // Keep top N
-    const trimmed = entries.slice(0, MAX_ENTRIES);
-    saveEntries(trimmed);
-    return trimmed;
 }
 
-export function getHighScore(username) {
-    const entries = getEntries();
-    const entry = entries.find(e => e.username === username);
-    return entry ? entry.score : 0;
-}
-
-function renderLeaderboard() {
+// Fetch leaderboard from Supabase and render
+async function fetchAndRender() {
     if (!tbodyEl) return;
-    const entries = getEntries();
+
+    tbodyEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6a6a8a;padding:20px;">Loading...</td></tr>';
+
+    let entries = [];
+
+    if (supabase) {
+        try {
+            const { data, error } = await supabase
+                .from('scores')
+                .select('username, score, round')
+                .order('score', { ascending: false })
+                .limit(20);
+
+            if (!error && data) {
+                entries = data;
+            }
+        } catch (err) {
+            console.warn('Could not fetch leaderboard from Supabase:', err);
+        }
+    }
+
+    // Fallback to localStorage if Supabase returned nothing
+    if (entries.length === 0) {
+        entries = getFromLocal();
+    }
+
+    renderEntries(entries);
+}
+
+function renderEntries(entries) {
+    if (!tbodyEl) return;
     tbodyEl.innerHTML = '';
 
-    if (entries.length === 0) {
-        tbodyEl.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6a6a8a;padding:20px;">No scores yet. Start playing!</td></tr>';
+    if (!entries || entries.length === 0) {
+        tbodyEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6a6a8a;padding:20px;">No scores yet. Start demolishing!</td></tr>';
         return;
     }
 
@@ -104,11 +149,36 @@ function renderLeaderboard() {
             <td>${rankEmoji}</td>
             <td style="${isCurrent ? 'color:#ffd700;font-weight:700;' : ''}">${escapeHtml(entry.username)}</td>
             <td>${entry.score.toLocaleString()}</td>
-            <td>${entry.level || 1}</td>
             <td>${entry.round || 1}</td>
         `;
         tbodyEl.appendChild(tr);
     });
+}
+
+// ---- localStorage fallback ----
+const STORAGE_KEY = 'tower_destroyer_leaderboard';
+
+function saveToLocal(entry) {
+    try {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        const existing = data.find(e => e.username === entry.username);
+        if (existing) {
+            if (entry.score > existing.score) {
+                existing.score = entry.score;
+                existing.round = entry.round;
+            }
+        } else {
+            data.push(entry);
+        }
+        data.sort((a, b) => b.score - a.score);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.slice(0, 50)));
+    } catch { /* storage full */ }
+}
+
+function getFromLocal() {
+    try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]').slice(0, 20);
+    } catch { return []; }
 }
 
 function escapeHtml(str) {

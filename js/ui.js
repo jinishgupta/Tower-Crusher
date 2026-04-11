@@ -1,28 +1,19 @@
-// ui.js — HUD updates, camera shake, screen flash, floating text, combo/streak, level-up
+// ui.js — Simplified HUD: score, combo, round, integrity, abilities (no HP/energy/stars/XP)
 import * as THREE from 'three';
 
 let cameraShakeIntensity = 0;
 let cameraShakeDecay = 0;
 const cameraOffset = new THREE.Vector3();
 
-// DOM references
 const dom = {};
 
 export function initUI() {
-    dom.hpBar = document.getElementById('hp-bar');
-    dom.hpText = document.getElementById('hp-text');
-    dom.energyBar = document.getElementById('energy-bar');
-    dom.energyText = document.getElementById('energy-text');
     dom.scoreDisplay = document.getElementById('score-display');
     dom.comboDisplay = document.getElementById('combo-display');
     dom.streakText = document.getElementById('streak-text');
     dom.roundDisplay = document.getElementById('round-display');
     dom.integrityBar = document.getElementById('integrity-bar');
     dom.integrityText = document.getElementById('integrity-text');
-    dom.starsDisplay = document.getElementById('stars-display');
-    dom.levelDisplay = document.getElementById('level-display');
-    dom.xpBar = document.getElementById('xp-bar');
-    dom.xpText = document.getElementById('xp-text');
     dom.shockwaveSlot = document.getElementById('ability-shockwave');
     dom.slamSlot = document.getElementById('ability-slam');
     dom.screenFlash = document.getElementById('screen-flash');
@@ -34,37 +25,15 @@ export function initUI() {
     dom.clickHint = document.getElementById('click-hint');
 }
 
-export function showHUD() {
-    dom.hud.classList.remove('hidden');
-}
+export function showHUD() { dom.hud.classList.remove('hidden'); }
+export function hideHUD() { dom.hud.classList.add('hidden'); }
+export function showClickHint() { dom.clickHint.classList.remove('hidden'); }
+export function hideClickHint() { dom.clickHint.classList.add('hidden'); }
 
-export function hideHUD() {
-    dom.hud.classList.add('hidden');
-}
-
-export function showClickHint() {
-    dom.clickHint.classList.remove('hidden');
-}
-
-export function hideClickHint() {
-    dom.clickHint.classList.add('hidden');
-}
-
-// -- Update bars and stats --
 let displayScore = 0;
 
 export function updateHUD(state, dt) {
-    // HP bar
-    const hpPct = (state.hp / state.maxHp) * 100;
-    dom.hpBar.style.width = `${hpPct}%`;
-    dom.hpText.textContent = Math.round(state.hp);
-
-    // Energy bar
-    const energyPct = (state.energy / state.maxEnergy) * 100;
-    dom.energyBar.style.width = `${energyPct}%`;
-    dom.energyText.textContent = Math.round(state.energy);
-
-    // Score ticker (animated)
+    // Score ticker
     const scoreDiff = state.score - displayScore;
     displayScore += scoreDiff * Math.min(dt * 8, 1);
     dom.scoreDisplay.textContent = Math.round(displayScore).toLocaleString();
@@ -103,30 +72,16 @@ export function updateHUD(state, dt) {
     if (intPct < 15) dom.integrityBar.classList.add('critical');
     else if (intPct < 40) dom.integrityBar.classList.add('low');
 
-    // Stars
-    const stars = dom.starsDisplay.querySelectorAll('.star');
-    stars.forEach((s, i) => {
-        s.classList.toggle('lit', i < state.stars);
-        s.classList.toggle('dim', i >= state.stars);
-    });
-
-    // Level + XP
-    dom.levelDisplay.textContent = `LVL ${state.level}`;
-    const xpForNext = state.level * 100;
-    const xpPct = (state.xp / xpForNext) * 100;
-    dom.xpBar.style.width = `${Math.min(100, xpPct)}%`;
-    dom.xpText.textContent = `${state.xp} / ${xpForNext} XP`;
-
     // Ability cooldowns
     updateAbilitySlot(dom.shockwaveSlot, state.shockwaveCd, 5);
     updateAbilitySlot(dom.slamSlot, state.slamCd, 10);
 }
 
 function updateAbilitySlot(slot, cd, maxCd) {
+    if (!slot) return;
     const overlay = slot.querySelector('.ability-cd-overlay');
     if (cd > 0) {
-        const pct = (cd / maxCd) * 100;
-        overlay.style.height = `${pct}%`;
+        overlay.style.height = `${(cd / maxCd) * 100}%`;
         slot.classList.remove('ready');
     } else {
         overlay.style.height = '0%';
@@ -156,7 +111,7 @@ export function updateCameraShake(camera, dt) {
 export function screenFlash(color = 'rgba(0, 240, 255, 0.3)') {
     dom.screenFlash.style.background = color;
     dom.screenFlash.classList.remove('active');
-    void dom.screenFlash.offsetWidth; // force reflow
+    void dom.screenFlash.offsetWidth;
     dom.screenFlash.classList.add('active');
     setTimeout(() => dom.screenFlash.classList.remove('active'), 400);
 }
@@ -191,18 +146,6 @@ export function showRoundSummary(stats) {
     document.getElementById('summary-score').textContent = stats.score.toLocaleString();
     document.getElementById('summary-combo').textContent = `${stats.peakCombo.toFixed(1)}x`;
     document.getElementById('summary-time').textContent = `${stats.time.toFixed(1)}s`;
-    document.getElementById('summary-xp').textContent = `+${stats.xpEarned}`;
-
-    const starsContainer = document.getElementById('summary-stars');
-    starsContainer.innerHTML = '';
-    for (let i = 0; i < 3; i++) {
-        const star = document.createElement('span');
-        star.textContent = '★';
-        star.style.fontSize = '36px';
-        star.style.color = i < stats.stars ? '#ffd700' : 'rgba(255,215,0,0.15)';
-        if (i < stats.stars) star.style.textShadow = '0 0 10px #ffd700';
-        starsContainer.appendChild(star);
-    }
 }
 
 export function hideRoundSummary() {
@@ -213,7 +156,6 @@ export function hideRoundSummary() {
 export function showLevelUpBanner(level) {
     dom.levelUpBanner.classList.remove('hidden');
     document.getElementById('lu-level').textContent = `LEVEL ${level}`;
-    // Auto-hide after 2.5s
     setTimeout(() => dom.levelUpBanner.classList.add('hidden'), 2500);
 }
 
@@ -222,14 +164,12 @@ export function showGameOver(score, rounds, level) {
     dom.gameOver.classList.remove('hidden');
     document.getElementById('go-score').textContent = score.toLocaleString();
     document.getElementById('go-rounds').textContent = rounds;
-    document.getElementById('go-level').textContent = level;
 }
 
 export function hideGameOver() {
     dom.gameOver.classList.add('hidden');
 }
 
-// -- Reset displayed score --
 export function resetDisplayScore() {
     displayScore = 0;
 }
