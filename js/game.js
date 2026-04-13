@@ -14,8 +14,7 @@ import { stepPhysics, enforceBodyLimit } from './physics.js';
 import {
     initUI, showHUD, hideHUD, updateHUD, triggerCameraShake, updateCameraShake,
     screenFlash, showFloatingScore, worldToScreen, showRoundSummary, hideRoundSummary,
-    showGameOver, hideGameOver, showClickHint,
-    resetDisplayScore
+    showGameOver, hideGameOver, showClickHint, triggerXPDamage, resetDisplayScore
 } from './ui.js';
 import { saveScore } from './leaderboard.js';
 import { playComboTick, playRoundComplete } from './audio.js';
@@ -69,7 +68,12 @@ export function createGameState() {
         params: {},
         summaryTimer: 0,
         ballHitCd: 0,
+        craneHitCd: 0,
         _roundEnded: false,
+        // XP System
+        xp: 100,
+        maxXp: 100,
+        totalXpEarned: 0,
     };
 }
 
@@ -227,6 +231,11 @@ export function startGame(gs, scene, camera, username, params) {
     gs.peakCombo = 1.0;
     gs.totalStars = 0;
     gs.roundStars = 0;
+    // XP System init
+    gs.xp = 100;
+    gs.maxXp = 100;
+    gs.totalXpEarned = 0;
+    gs.craneHitCd = 0;
 
     initUI();
     showHUD();
@@ -253,6 +262,11 @@ export function restartGame(gs, scene, camera) {
     gs.peakCombo = 1.0;
     gs.totalStars = 0;
     gs.roundStars = 0;
+    // XP System reset
+    gs.xp = 100;
+    gs.maxXp = 100;
+    gs.totalXpEarned = 0;
+    gs.craneHitCd = 0;
 
     hideGameOver();
     showHUD();
@@ -417,6 +431,7 @@ export function updateGame(gs, dt, scene, camera) {
     // -- PLAYING --
     gs.roundTimer += dt;
     gs.ballHitCd = Math.max(0, gs.ballHitCd - dt);
+    gs.craneHitCd = Math.max(0, gs.craneHitCd - dt);
 
     // Combo decay
     gs.comboTimer += dt;
@@ -438,6 +453,8 @@ export function updateGame(gs, dt, scene, camera) {
     for (const tower of gs.towers) {
         updateTower(tower, dt, scene);
     }
+
+    checkCraneCollisions(gs);
 
     if (allTowersDestroyed(gs) && !gs._roundEnded) {
         gs._roundEnded = true;
@@ -470,6 +487,9 @@ export function updateGame(gs, dt, scene, camera) {
         shockwaveCd: gs.player ? gs.player.shockwaveCooldown : 0,
         slamCd: gs.player ? gs.player.slamCooldown : 0,
         missions: gs.missions,
+        // XP System
+        xp: gs.xp,
+        maxXp: gs.maxXp,
     }, dt);
 }
 
@@ -555,6 +575,70 @@ function handleBlockDestroyed(gs, result, camera) {
     if (gs.streak === 20) screenFlash('rgba(255, 215, 0, 0.4)');
 }
 
+function checkCraneCollisions(gs) {
+    if (!gs.player || gs.craneHitCd > 0) return;
+
+    const player = gs.player;
+    const centerX = player.posX;
+    const centerY = 1.8;
+    const centerZ = player.posZ;
+    const halfWidth = 2.2;
+    const halfHeight = 2.2;
+    const halfDepth = 3.2;
+    const blockHalf = 0.5;
+
+    const cosYaw = Math.cos(player.yaw);
+    const sinYaw = Math.sin(player.yaw);
+
+    for (const tower of gs.towers) {
+        for (const block of tower.blocks) {
+            if (block.destroyed) continue;
+
+            const bpos = block.mesh.position;
+            const dx = bpos.x - centerX;
+            const dz = bpos.z - centerZ;
+
+            if (dx * dx + dz * dz > 90) continue;
+
+            const localX = dx * cosYaw + dz * sinYaw;
+            const localZ = -dx * sinYaw + dz * cosYaw;
+            const localY = bpos.y - centerY;
+
+            const overlaps =
+                Math.abs(localX) <= halfWidth + blockHalf &&
+                Math.abs(localY) <= halfHeight + blockHalf &&
+                Math.abs(localZ) <= halfDepth + blockHalf;
+
+            if (overlaps) {
+                const xpLoss = 3;
+                gs.craneHitCd = 0.35;
+                loseXP(gs, xpLoss);
+                return;
+            }
+        }
+    }
+}
+
+function loseXP(gs, amount) {
+    gs.xp = Math.max(0, gs.xp - amount);
+    gs.totalXpEarned += amount; // Track total XP lost
+    
+    triggerXPDamage(amount);
+    
+    if (gs.xp <= 0) {
+        // Game Over - XP depleted
+        endGameFromXPLoss(gs);
+    }
+}
+
+function endGameFromXPLoss(gs) {
+    gs.state = STATES.GAME_OVER;
+    gs.totalScore = gs.score;
+    saveScore(gs.username, gs.score, gs.totalStars, gs.round);
+    showGameOver(gs.score, gs.round, gs.totalXpEarned);
+    hideHUD();
+}
+
 function endRound(gs) {
     updateMissionProgress(gs, true);
 
@@ -588,7 +672,7 @@ function gameOver(gs) {
     gs.state = STATES.GAME_OVER;
     gs.totalScore = gs.score;
     saveScore(gs.username, gs.score, gs.totalStars, gs.round);
-    showGameOver(gs.score, gs.round);
+    showGameOver(gs.score, gs.round, gs.totalXpEarned);
     hideHUD();
 }
 

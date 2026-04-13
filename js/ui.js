@@ -1,4 +1,4 @@
-// ui.js — Simplified HUD: score, combo, round, integrity, abilities (no HP/energy/stars/XP)
+// ui.js — Enhanced HUD: score, combo, round, integrity, abilities, XP system
 import * as THREE from 'three';
 
 let cameraShakeIntensity = 0;
@@ -26,7 +26,6 @@ export function initUI() {
     dom.floatingTexts = document.getElementById('floating-texts');
     dom.hud = document.getElementById('hud');
     dom.roundSummary = document.getElementById('round-summary');
-    dom.levelUpBanner = document.getElementById('level-up-banner');
     dom.gameOver = document.getElementById('game-over');
     dom.clickHint = document.getElementById('click-hint');
     dom.summaryMissionSlots = [
@@ -34,6 +33,10 @@ export function initUI() {
         document.getElementById('summary-obj-weak'),
         document.getElementById('summary-obj-ability')
     ];
+    // XP System elements
+    dom.xpDisplay = document.getElementById('xp-display');
+    dom.xpBar = document.getElementById('xp-bar');
+    dom.xpBarFill = document.getElementById('xp-bar-fill');
 }
 
 export function showHUD() { dom.hud.classList.remove('hidden'); }
@@ -42,12 +45,16 @@ export function showClickHint() { dom.clickHint.classList.remove('hidden'); }
 export function hideClickHint() { dom.clickHint.classList.add('hidden'); }
 
 let displayScore = 0;
+let displayXP = 0;
 
 export function updateHUD(state, dt) {
     // Score ticker
     const scoreDiff = state.score - displayScore;
     displayScore += scoreDiff * Math.min(dt * 8, 1);
     dom.scoreDisplay.textContent = Math.round(displayScore).toLocaleString();
+
+    // XP system display
+    updateXPDisplay(state, dt);
 
     // Combo
     dom.comboDisplay.textContent = `${state.combo.toFixed(1)}x`;
@@ -102,6 +109,34 @@ export function updateHUD(state, dt) {
     updateAbilitySlot(dom.slamSlot, state.slamCd, 10);
 }
 
+function updateXPDisplay(state, dt) {
+    if (!dom.xpDisplay || !dom.xpBar || !dom.xpBarFill) return;
+
+    // Smooth XP bar animation
+    displayXP += (state.xp - displayXP) * Math.min(dt * 6, 1);
+    const xpPercentage = Math.max(0, Math.min(100, (displayXP / state.maxXp) * 100));
+    
+    if (dom.xpBarFill) {
+        dom.xpBarFill.style.width = `${xpPercentage}%`;
+    }
+
+    dom.xpDisplay.textContent = `${Math.round(displayXP)} / ${state.maxXp}`;
+
+    // Warning effect when low on XP
+    if (state.xp < state.maxXp * 0.2 && state.xp > 0) {
+        dom.xpBar?.classList.add('xp-low');
+    } else {
+        dom.xpBar?.classList.remove('xp-low');
+    }
+
+    // Critical warning when very low
+    if (state.xp < state.maxXp * 0.1 && state.xp > 0) {
+        dom.xpBar?.classList.add('xp-critical');
+    } else {
+        dom.xpBar?.classList.remove('xp-critical');
+    }
+}
+
 function setMissionItem(el, label, complete, failed) {
     if (!el) return;
     const marker = complete ? '✓' : failed ? '✗' : '○';
@@ -148,6 +183,30 @@ export function screenFlash(color = 'rgba(0, 240, 255, 0.3)') {
     void dom.screenFlash.offsetWidth;
     dom.screenFlash.classList.add('active');
     setTimeout(() => dom.screenFlash.classList.remove('active'), 400);
+}
+
+// -- XP Damage Effect --
+export function triggerXPDamage(amount) {
+    // Red flash effect
+    screenFlash(`rgba(255, 51, 85, 0.4)`);
+    
+    // Stronger camera shake
+    triggerCameraShake(0.5);
+    
+    // Show XP loss in center
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2 - 80;
+    showXPLossText(amount, centerX, centerY);
+}
+
+export function showXPLossText(amount, screenX, screenY) {
+    const el = document.createElement('div');
+    el.classList.add('xp-loss-text');
+    el.textContent = `-${amount} XP`;
+    el.style.left = `${screenX}px`;
+    el.style.top = `${screenY}px`;
+    dom.floatingTexts.appendChild(el);
+    setTimeout(() => el.remove(), 900);
 }
 
 // -- Floating Score Text --
@@ -202,18 +261,17 @@ export function hideRoundSummary() {
     dom.roundSummary.classList.add('hidden');
 }
 
-// -- Level Up Banner --
-export function showLevelUpBanner(level) {
-    dom.levelUpBanner.classList.remove('hidden');
-    document.getElementById('lu-level').textContent = `LEVEL ${level}`;
-    setTimeout(() => dom.levelUpBanner.classList.add('hidden'), 2500);
-}
-
 // -- Game Over --
-export function showGameOver(score, rounds, level) {
+export function showGameOver(score, rounds, totalXP) {
     dom.gameOver.classList.remove('hidden');
     document.getElementById('go-score').textContent = score.toLocaleString();
     document.getElementById('go-rounds').textContent = rounds;
+
+    // Show total XP earned across all rounds
+    const xpEl = document.getElementById('go-total-xp');
+    if (xpEl) {
+        xpEl.textContent = totalXP.toLocaleString();
+    }
 }
 
 export function hideGameOver() {

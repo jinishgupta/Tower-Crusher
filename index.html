@@ -102,7 +102,7 @@
                 <div id="obj-weak" class="mission-item">○ Objective slot 2</div>
                 <div id="obj-ability" class="mission-item">○ Objective slot 3</div>
             </div>
-            <button id="leaderboard-btn" title="Leaderboard (Tab)">🏆</button>
+            <button id="leaderboard-btn" title="Leaderboard (Tab)">🏆 Leaderboard</button>
         </div>
 
         <!-- Bottom center: Ability cooldowns -->
@@ -119,6 +119,14 @@
                 <span class="ability-key">Q</span>
                 <span class="ability-name">Ball Drop</span>
             </div>
+        </div>
+
+        <!-- XP System: Bottom left -->
+        <div id="hud-bottom-left">
+            <div id="xp-bar" class="xp-bar-container">
+                <div id="xp-bar-fill" class="xp-bar-fill"></div>
+            </div>
+            <div id="xp-display">100 / 100</div>
         </div>
 
         <div id="mobile-controls" aria-label="Mobile controls">
@@ -182,19 +190,15 @@
         </div>
     </div>
 
-    <!-- Level up banner -->
-    <div id="level-up-banner" class="hidden">
-        <div class="lu-text">LEVEL UP!</div>
-        <div id="lu-level" class="lu-level">LEVEL 2</div>
-    </div>
-
     <!-- Game over -->
     <div id="game-over" class="hidden">
         <div class="go-panel">
             <h1 class="go-title">GAME OVER</h1>
+            <div class="go-subtitle">You ran out of XP!</div>
             <div class="go-stats">
                 <div class="summary-row"><span>Final Score</span><span id="go-score">0</span></div>
-                <div class="summary-row"><span>Rounds</span><span id="go-rounds">0</span></div>
+                <div class="summary-row"><span>Rounds Survived</span><span id="go-rounds">1</span></div>
+                <div class="summary-row"><span>XP Lost</span><span id="go-total-xp">0</span></div>
             </div>
             <button id="go-restart-btn">▶ PLAY AGAIN</button>
         </div>

@@ -75,52 +75,13 @@ export async function saveScore(username, score, stars, round) {
     if (!supabase) return;
 
     try {
-        let existing = null;
-        let supportsStars = true;
-
-        const withStars = await supabase
+        const { error: upsertErr } = await supabase
             .from('scores')
-            .select('score, stars')
-            .eq('username', entry.username)
-            .single();
+            .upsert(entry, { onConflict: 'username' });
 
-        if (withStars.error) {
-            supportsStars = false;
-            const withoutStars = await supabase
-                .from('scores')
-                .select('score')
-                .eq('username', entry.username)
-                .single();
-            existing = withoutStars.data ? { score: withoutStars.data.score || 0, stars: 0 } : null;
-        } else {
-            existing = withStars.data;
-        }
-
-        const shouldUpdate = !existing || rankValue(entry) > rankValue(existing);
-        if (!shouldUpdate) return;
-
-        if (existing) {
-            const payload = supportsStars
-                ? { score: entry.score, stars: entry.stars, round: entry.round, updated_at: entry.updated_at }
-                : { score: entry.score, round: entry.round, updated_at: entry.updated_at };
-            await supabase
-                .from('scores')
-                .update(payload)
-                .eq('username', entry.username);
-        } else {
-            if (supportsStars) {
-                await supabase.from('scores').insert(entry);
-            } else {
-                await supabase.from('scores').insert({
-                    username: entry.username,
-                    score: entry.score,
-                    round: entry.round,
-                    updated_at: entry.updated_at,
-                });
-            }
-        }
+        if (upsertErr) throw upsertErr;
     } catch (err) {
-        console.warn('Could not save score to Supabase:', err);
+        console.warn('Could not save score/stars to Supabase:', err);
     }
 }
 
@@ -143,15 +104,6 @@ async function fetchAndRender() {
 
             if (!withStars.error && withStars.data) {
                 entries = withStars.data;
-            } else {
-                const fallback = await supabase
-                    .from('scores')
-                    .select('username, score, round')
-                    .order('score', { ascending: false })
-                    .limit(20);
-                if (!fallback.error && fallback.data) {
-                    entries = fallback.data.map((e) => ({ ...e, stars: 0 }));
-                }
             }
         } catch (err) {
             console.warn('Could not fetch leaderboard from Supabase:', err);
@@ -186,8 +138,8 @@ function renderEntries(entries) {
         tr.innerHTML = `
             <td>${rankEmoji}</td>
             <td style="${isCurrent ? 'color:#ffd700;font-weight:700;' : ''}">${escapeHtml(entry.username)}</td>
-            <td>${entry.score.toLocaleString()}</td>
-            <td>${entry.stars || 0}</td>
+            <td>${Math.round(entry.score || 0).toLocaleString()}</td>
+            <td>${Math.max(0, Math.round(entry.stars || 0))}</td>
             <td>${entry.round || 1}</td>
         `;
         tbodyEl.appendChild(tr);
@@ -202,11 +154,10 @@ function saveToLocal(entry) {
         const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         const existing = data.find(e => e.username === entry.username);
         if (existing) {
-            if (rankValue(entry) > rankValue(existing)) {
-                existing.score = entry.score;
-                existing.stars = entry.stars;
-                existing.round = entry.round;
-            }
+            existing.score = entry.score;
+            existing.stars = entry.stars;
+            existing.round = entry.round;
+            existing.updated_at = entry.updated_at;
         } else {
             data.push(entry);
         }

@@ -13,6 +13,7 @@ export const SUPABASE_ANON_KEY = env.VITE_SUPABASE_PUBLISHABLE_KEY || window.SUP
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     score INTEGER NOT NULL DEFAULT 0,
+    stars INTEGER NOT NULL DEFAULT 0,
     round INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -20,6 +21,7 @@ export const SUPABASE_ANON_KEY = env.VITE_SUPABASE_PUBLISHABLE_KEY || window.SUP
 
   -- Index for fast leaderboard queries
   CREATE INDEX idx_scores_score ON scores (score DESC);
+  CREATE INDEX idx_scores_stars_score ON scores (stars DESC, score DESC);
 
   -- Enable Row Level Security (RLS) but allow public read/write via anon key
   ALTER TABLE scores ENABLE ROW LEVEL SECURITY;

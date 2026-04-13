@@ -26,7 +26,7 @@ export function getArchetypeForRound(round) {
 }
 
 const blockSize = 1.0;
-const blockGap = 0.04;
+const blockGap = 0.015;
 const blockUnit = blockSize + blockGap;
 
 function varyColor(baseColor, variation = 0.08) {
@@ -57,12 +57,14 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15, archetyp
     const blocks = [];
 
     // Shared geometry for performance
-    const geometry = new THREE.BoxGeometry(blockSize * 0.96, blockSize * 0.96, blockSize * 0.96);
-    const edgesGeo = new THREE.EdgesGeometry(geometry);
+    const geometry = new THREE.BoxGeometry(blockSize * 0.99, blockSize * 0.99, blockSize * 0.99);
 
     const offsetX = -((baseWidth - 1) * blockUnit) / 2;
     const offsetZ = -((baseDepth - 1) * blockUnit) / 2;
-    const segmentGap = isSegmented ? 0.55 : 0;
+    const segmentGap = isSegmented ? 0.08 : 0;
+    const taperStart = round < 4 ? 0.88 : 0.7;
+    const coreX = Math.floor((baseWidth - 1) / 2);
+    const coreZ = Math.floor((baseDepth - 1) / 2);
 
     // Grid lookup for structural support checking
     const grid = {};
@@ -70,25 +72,35 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15, archetyp
     for (let y = 0; y < clampedHeight; y++) {
         for (let x = 0; x < baseWidth; x++) {
             for (let z = 0; z < baseDepth; z++) {
+                const isCoreCell = x === coreX && z === coreZ;
+
                 // Taper at top for building shape
-                if (y > clampedHeight * 0.7) {
-                    const taper = (y - clampedHeight * 0.7) / (clampedHeight * 0.3);
-                    if (x === 0 && taper > 0.5) continue;
-                    if (x === baseWidth - 1 && taper > 0.5) continue;
-                    if (z === 0 && taper > 0.5) continue;
-                    if (z === baseDepth - 1 && taper > 0.5) continue;
+                if (y > clampedHeight * taperStart) {
+                    const taper = (y - clampedHeight * taperStart) / (clampedHeight * (1 - taperStart));
+                    if (!isCoreCell) {
+                        if (x === 0 && taper > 0.5) continue;
+                        if (x === baseWidth - 1 && taper > 0.5) continue;
+                        if (z === 0 && taper > 0.5) continue;
+                        if (z === baseDepth - 1 && taper > 0.5) continue;
+                    }
                 }
 
                 // Skip some interior blocks to reduce count (hollow building)
                 const isEdge = x === 0 || x === baseWidth - 1 || z === 0 || z === baseDepth - 1;
-                if (!isEdge && y > 1 && y < clampedHeight - 1) continue;
+                if (!isEdge && !isCoreCell && y > 1 && y < clampedHeight - 1) continue;
 
-                const blockColor = varyColor(matDef.color);
+                const blockColor = varyColor(matDef.color, 0.04);
+                const isTopBand = y > clampedHeight * 0.75;
+                if (isTopBand) {
+                    blockColor.lerp(new THREE.Color(0xffffff), 0.08);
+                }
+
                 const material = new THREE.MeshStandardMaterial({
                     color: blockColor,
                     emissive: matDef.emissive,
-                    roughness: matDef.roughness,
-                    metalness: matDef.metalness || 0.1
+                    emissiveIntensity: matKey === 'crystal' ? 0.25 : (matKey === 'steel' ? 0.1 : 0.04),
+                    roughness: Math.max(0.12, matDef.roughness - (isTopBand ? 0.05 : 0)),
+                    metalness: Math.min(1, (matDef.metalness || 0.1) + (isEdge ? 0.04 : 0))
                 });
 
                 const mesh = new THREE.Mesh(geometry, material);
@@ -101,12 +113,6 @@ export function generateTower(scene, round, centerX = 0, centerZ = -15, archetyp
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 scene.add(mesh);
-
-                // Edge wireframe
-                const edgeMat = new THREE.LineBasicMaterial({
-                    color: 0x000000, transparent: true, opacity: 0.12
-                });
-                mesh.add(new THREE.LineSegments(edgesGeo, edgeMat));
 
                 const body = createBody({
                     x: wx, y: wy, z: wz,
@@ -377,6 +383,14 @@ export function getIntegrity(tower) {
 function regenerateCoreBlock(tower, block) {
     if (!tower.scene || !block.isRegenCore || !block.destroyed) return;
 
+    // Never regenerate a core block into mid-air.
+    const hasSupport = block.gridY === 0 || checkBlockSupport(tower, block);
+    if (!hasSupport) {
+        block.canRegen = false;
+        block.regenTimer = 0;
+        return;
+    }
+
     const geometry = new THREE.BoxGeometry(blockSize * 0.96, blockSize * 0.96, blockSize * 0.96);
     const material = new THREE.MeshStandardMaterial({
         color: varyColor(MATERIALS.crystal.color),
@@ -415,6 +429,10 @@ function regenerateCoreBlock(tower, block) {
     tower.grid[key] = block;
     tower.destroyedCount = Math.max(0, tower.destroyedCount - 1);
 
+    // Re-evaluate structure after regeneration to keep the stack coherent.
+    tower.supportCheckPending = true;
+    tower.supportCheckTimer = 0.05;
+
     emitShatter(block.basePosition, 12);
 }
 
@@ -434,6 +452,11 @@ export function updateTower(tower, dt, scene) {
         if (block.destroyed && block.canRegen) {
             block.regenTimer -= dt;
             if (block.regenTimer <= 0) {
+                if (getIntegrity(tower) <= 0.05) {
+                    block.canRegen = false;
+                    block.regenTimer = 0;
+                    continue;
+                }
                 regenerateCoreBlock(tower, block);
             }
             continue;
